@@ -263,7 +263,7 @@ export default function Home() {
                             <div style={P.metaBanner}>
                               <div style={P.metaIcon}>{FOCUS_ICONS[msg.content.metaStatus.focus] || '🧠'}</div>
                               <div style={P.metaTexts}>
-                                <span style={P.metaFocus}>FOCUS: {msg.content.metaStatus.focus?.toUpperCase()}</span>
+                                <span style={P.metaFocus}>{msg.meta?.mode === 'casual' ? '💬 CHAT' : 'FOCUS: ' + (msg.content.metaStatus.focus?.toUpperCase())}</span>
                                 <span style={P.metaRationale}>{msg.content.metaStatus.rationale}</span>
                               </div>
                               {msg.content.metaStatus.friScore !== undefined && (

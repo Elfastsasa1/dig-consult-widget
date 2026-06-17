@@ -1,30 +1,24 @@
 // API Route: POST /api/dig/consult
-// Handles consultation requests from the DIG Widget
+// Handles consultation requests from the DIG Chat Widget
 
 import { consultLLM } from '../../../lib/dig-engine';
 
 export default async function handler(req, res) {
-  // CORS headers
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { topic, context, urgency, depth } = req.body;
 
-  // Validation
-  if (!topic || !context) {
+  if (!topic) {
     return res.status(400).json({
-      error: 'Missing required fields',
-      required: ['topic', 'context'],
-      optional: ['urgency (default: medium)', 'depth (default: normal)'],
+      error: 'Missing required field: topic (or context)',
+      required: ['topic'],
+      optional: ['context', 'urgency', 'depth'],
     });
   }
 
@@ -33,7 +27,7 @@ export default async function handler(req, res) {
 
   const input = {
     topic: String(topic).trim().substring(0, 500),
-    context: String(context).trim().substring(0, 5000),
+    context: String(context || topic).trim().substring(0, 5000),
     urgency: validUrgency.includes(urgency) ? urgency : 'medium',
     depth: validDepth.includes(depth) ? depth : 'normal',
   };
@@ -43,11 +37,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      input: {
-        topic: input.topic,
-        urgency: input.urgency,
-        depth: input.depth,
-      },
+      input: { topic: input.topic, urgency: input.urgency, depth: input.depth },
       result: {
         diagnosis: result.diagnosis,
         analysis: result.analysis,
@@ -59,9 +49,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[API] Consult error:', err);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: err.message,
-    });
+    return res.status(500).json({ error: 'Internal server error', message: err.message });
   }
 }

@@ -2,14 +2,23 @@ import { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 
 // ═══════════════════════════════════════════
-// DIG Chat Widget v2.0 — FRI-Modulated Edition
-// Pillar 1: Meta-Cognitive Status Banner
-// Pillar 2: Cross-Linker in responses
-// Pillar 3: Feedback Loop (Thumbs Up/Down)
-// NEW: FRI Gauge — System Health Indicator
+// DIG Chat Widget v2.1 — Mobile-Responsive
 // ═══════════════════════════════════════════
 
 const FOCUS_ICONS = { resilience: '🛡️', efficiency: '⚡', speed: '🚀', caution: '🔍', exploration: '🧭' };
+const MOBILE_BREAKPOINT = 768;
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width:${MOBILE_BREAKPOINT}px)`);
+    setMobile(mq.matches);
+    const handler = (e) => setMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return mobile;
+}
 
 export default function Home() {
   const [messages, setMessages] = useState([]);
@@ -19,36 +28,32 @@ export default function Home() {
   const [depth, setDepth] = useState('normal');
   const [showSettings, setShowSettings] = useState(false);
   const [fri, setFri] = useState(null);
-  const [friHistory, setFriHistory] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const isMobile = useIsMobile();
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // Fetch initial FRI
-  useEffect(() => {
-    fetchFRI();
-  }, []);
+  useEffect(() => { fetchFRI(); }, []);
+  useEffect(() => { if (!isMobile) setSidebarOpen(false); }, [isMobile]);
 
   const fetchFRI = async () => {
     try {
       const res = await fetch('/api/dig/fri');
       const data = await res.json();
-      if (data.success && data.fri) {
-        setFri(data.fri);
-        setFriHistory(prev => [...prev.slice(-20), { score: data.fri.score, time: Date.now() }]);
-      }
-    } catch (e) { /* silent */ }
+      if (data.success && data.fri) setFri(data.fri);
+    } catch (e) {}
   };
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!input.trim() || loading) return;
-
     const userMsg = input.trim();
     setInput('');
     setLoading(true);
+    if (isMobile) setSidebarOpen(false);
     setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
 
     try {
@@ -58,20 +63,9 @@ export default function Home() {
         body: JSON.stringify({ topic: userMsg, context: userMsg, urgency, depth }),
       });
       const data = await res.json();
-
       if (data.success && data.result) {
-        // Update FRI from response
-        if (data.fri) {
-          setFri(data.fri);
-          setFriHistory(prev => [...prev.slice(-20), { score: data.fri.score, time: Date.now() }]);
-        }
-        setMessages((prev) => [...prev, {
-          role: 'assistant',
-          content: data.result,
-          meta: data.meta,
-          fri: data.fri,
-          feedback: null,
-        }]);
+        if (data.fri) setFri(data.fri);
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.result, meta: data.meta, fri: data.fri, feedback: null }]);
       } else {
         setMessages((prev) => [...prev, { role: 'assistant', content: null, error: data.error || 'Failed' }]);
       }
@@ -87,124 +81,125 @@ export default function Home() {
     const msg = messages[msgIdx];
     if (!msg || msg.feedback === rating) return;
     setMessages(prev => prev.map((m, i) => i === msgIdx ? { ...m, feedback: rating } : m));
-
     try {
       await fetch('/api/dig/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messageIndex: msgIdx,
-          userMessage: messages[msgIdx - 1]?.content || '',
-          diagnosis: msg.content?.diagnosis || '',
-          rating,
-        }),
+        body: JSON.stringify({ messageIndex: msgIdx, userMessage: messages[msgIdx - 1]?.content || '', diagnosis: msg.content?.diagnosis || '', rating }),
       });
-      // Refresh FRI after feedback
       setTimeout(fetchFRI, 500);
-    } catch (e) { /* feedback failed silently */ }
+    } catch (e) {}
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
   };
 
+  const P = isMobile ? MP : DP; // P = Responsive style set
+
   return (
     <>
       <Head>
         <title>DIG — AI Consultation</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
 
-      <div style={S.page}>
+      <div style={P.page}>
+        {/* Mobile Sidebar Overlay */}
+        {isMobile && sidebarOpen && <div style={P.overlay} onClick={() => setSidebarOpen(false)} />}
+
         {/* Sidebar */}
-        <aside style={S.sidebar}>
-          <div style={S.sidebarHeader}>
-            <div style={S.logo}>⬡</div>
-            <span style={S.logoText}>DIG</span>
+        <aside style={{...P.sidebar, ...(isMobile && !sidebarOpen ? { transform:'translateX(-100%)' } : {}), ...(isMobile && sidebarOpen ? { position:'fixed', zIndex:100 } : {}) }}>
+          <div style={P.sidebarHeader}>
+            <div style={P.logo}>⬡</div>
+            <span style={P.logoText}>DIG</span>
+            {isMobile && <span style={P.closeBtn} onClick={() => setSidebarOpen(false)}>✕</span>}
           </div>
-          <div style={S.sidebarNew} onClick={() => { setMessages([]); }}>
-            <span style={S.plusIcon}>+</span> New Chat
+          <div style={P.sidebarNew} onClick={() => { setMessages([]); if (isMobile) setSidebarOpen(false); }}>
+            <span style={P.plusIcon}>+</span> New Chat
           </div>
-          <div style={S.sidebarHistory}>
+          <div style={P.sidebarHistory}>
             {messages.length === 0 ? (
-              <div style={S.sidebarEmpty}>No conversations yet</div>
+              <div style={P.sidebarEmpty}>No conversations yet</div>
             ) : (
-              <div style={S.sidebarItem}>
+              <div style={P.sidebarItem}>
                 {messages.find(m => m.role === 'user')?.content?.substring(0, 32) || 'New chat'}...
               </div>
             )}
           </div>
 
-          {/* FRI Sidebar Indicator */}
+          {/* FRI Sidebar */}
           {fri && (
-            <div style={S.friSidebar}>
-              <div style={S.friLabel}>SYSTEM HEALTH</div>
-              <div style={{...S.friScoreSidebar, color: fri.color}}>{fri.score}</div>
-              <div style={{...S.friLevelSidebar, color: fri.color}}>
+            <div style={P.friSidebar}>
+              <div style={P.friLabel}>SYSTEM HEALTH</div>
+              <div style={{...P.friScoreSidebar, color: fri.color}}>{fri.score}</div>
+              <div style={{...P.friLevelSidebar, color: fri.color}}>
                 {fri.icon} {fri.level}
               </div>
-              <div style={S.friBarOuter}>
-                <div style={{...S.friBarInner, width: `${fri.score}%`, background: fri.color}} />
+              <div style={P.friBarOuter}>
+                <div style={{...P.friBarInner, width: `${fri.score}%`, background: fri.color}} />
               </div>
             </div>
           )}
 
-          <div style={S.sidebarFooter}>
-            <div style={{...S.statusDot, background: fri ? fri.color : '#22c55e'}} />
-            <span style={S.footerText}>DIG v2.0 · FRI-Modulated</span>
+          <div style={P.sidebarFooter}>
+            <div style={{...P.statusDot, background: fri ? fri.color : '#22c55e'}} />
+            <span style={P.footerText}>DIG v2.1 · FRI-Modulated</span>
           </div>
         </aside>
 
         {/* Main */}
-        <main style={S.main}>
-          {/* Top Bar with FRI */}
-          <header style={S.topbar}>
-            <div style={S.topbarLeft}>
-              <span style={S.topbarTitle}>DIG Consultation</span>
+        <main style={P.main}>
+          {/* Top Bar */}
+          <header style={P.topbar}>
+            <div style={P.topbarLeft}>
+              {isMobile && (
+                <button style={P.hamburger} onClick={() => setSidebarOpen(true)}>☰</button>
+              )}
+              {!isMobile && <span style={P.topbarTitle}>DIG Consultation</span>}
+              {isMobile && <span style={P.topbarTitle}>DIG</span>}
               {fri && (
-                <div style={{...S.friBadge, borderColor: fri.color + '60'}}>
-                  <span style={{color: fri.color, fontSize: 11, fontWeight: 700}}>
+                <div style={{...P.friBadge, borderColor: fri.color + '60'}}>
+                  <span style={{color: fri.color, fontSize: isMobile ? 10 : 11, fontWeight: 700}}>
                     {fri.icon} FRI: {fri.score}
                   </span>
-                  <span style={{color: '#71717a', fontSize: 10}}>
-                    {fri.level}
-                  </span>
+                  {!isMobile && <span style={{color:'#71717a', fontSize: 10}}>{fri.level}</span>}
                 </div>
               )}
             </div>
-            <button style={S.settingsBtn} onClick={() => setShowSettings(!showSettings)}>
-              ⚙ Settings
+            <button style={P.settingsBtn} onClick={() => setShowSettings(!showSettings)}>
+              ⚙
             </button>
           </header>
 
-          {/* Settings Panel */}
+          {/* Settings */}
           {showSettings && (
-            <div style={S.settingsPanel}>
-              <div style={S.settingsRow}>
-                <span style={S.settingsLabel}>Urgency</span>
-                <div style={S.pillGroup}>
+            <div style={P.settingsPanel}>
+              <div style={{...P.settingsRow, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}}>
+                <span style={P.settingsLabel}>Urgency</span>
+                <div style={P.pillGroup}>
                   {['low', 'medium', 'high', 'critical'].map(u => (
                     <button key={u} onClick={() => setUrgency(u)} style={{
-                      ...S.pill, ...(urgency === u ? { background: '#3b82f6', color: '#fff', borderColor: '#3b82f6' } : {})
+                      ...P.pill, ...(urgency === u ? { background:'#3b82f6', color:'#fff', borderColor:'#3b82f6' } : {})
                     }}>{u}</button>
                   ))}
                 </div>
               </div>
-              <div style={S.settingsRow}>
-                <span style={S.settingsLabel}>Depth</span>
-                <div style={S.pillGroup}>
+              <div style={{...P.settingsRow, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}}>
+                <span style={P.settingsLabel}>Depth</span>
+                <div style={P.pillGroup}>
                   {['surface', 'normal', 'deep'].map(d => (
                     <button key={d} onClick={() => setDepth(d)} style={{
-                      ...S.pill, ...(depth === d ? { background: '#3b82f6', color: '#fff', borderColor: '#3b82f6' } : {})
+                      ...P.pill, ...(depth === d ? { background:'#3b82f6', color:'#fff', borderColor:'#3b82f6' } : {})
                     }}>{d}</button>
                   ))}
                 </div>
               </div>
               {fri && (
-                <div style={S.settingsRow}>
-                  <span style={S.settingsLabel}>FRI Detail</span>
-                  <div style={S.friDetail}>
+                <div style={{...P.settingsRow, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}}>
+                  <span style={P.settingsLabel}>FRI</span>
+                  <div style={{...P.friDetail, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 4 : 12}}>
                     <span>Satisfaction: {fri.breakdown?.satisfaction}%</span>
                     <span>Trend: {fri.breakdown?.trend}</span>
                     <span>Volume: {fri.breakdown?.volume}</span>
@@ -216,34 +211,33 @@ export default function Home() {
           )}
 
           {/* Messages */}
-          <div style={S.messages}>
+          <div style={P.messages}>
             {messages.length === 0 && (
-              <div style={S.welcome}>
-                <div style={S.welcomeIcon}>⬡</div>
-                <h2 style={S.welcomeTitle}>How can I help you today?</h2>
-                <p style={S.welcomeSub}>Diagnosis-first analysis powered by three pillars of intelligence and the FRI resilience system.</p>
+              <div style={P.welcome}>
+                <div style={P.welcomeIcon}>⬡</div>
+                <h2 style={P.welcomeTitle}>How can I help you today?</h2>
+                <p style={P.welcomeSub}>Diagnosis-first analysis powered by three pillars and FRI.</p>
 
-                {/* FRI Status Card */}
                 {fri && (
-                  <div style={{...S.friWelcomeCard, borderColor: fri.color + '40'}}>
-                    <div style={S.friWelcomeRow}>
-                      <span style={{fontSize: 24}}>{fri.icon}</span>
+                  <div style={{...P.friWelcomeCard, borderColor: fri.color + '40'}}>
+                    <div style={P.friWelcomeRow}>
+                      <span style={{fontSize: isMobile ? 20 : 24}}>{fri.icon}</span>
                       <div>
-                        <div style={{...S.friWelcomeScore, color: fri.color}}>FRI: {fri.score}/100</div>
-                        <div style={S.friWelcomeDesc}>{fri.description}</div>
+                        <div style={{...P.friWelcomeScore, color: fri.color}}>FRI: {fri.score}/100</div>
+                        <div style={P.friWelcomeDesc}>{fri.description}</div>
                       </div>
                     </div>
                     {fri.stats?.totalInteractions > 0 && (
-                      <div style={S.friWelcomeStats}>
+                      <div style={P.friWelcomeStats}>
                         {fri.stats.totalInteractions} interactions · {fri.stats.satisfactionRate}% satisfaction
                       </div>
                     )}
                   </div>
                 )}
 
-                <div style={S.suggestions}>
-                  {['My VPS keeps crashing at night', 'How to secure my crypto wallet?', 'My trading bot has too many false signals', 'Analyze this project architecture'].map(s => (
-                    <button key={s} style={S.suggestBtn} onClick={() => { setInput(s); inputRef.current?.focus(); }}>{s}</button>
+                <div style={P.suggestions}>
+                  {['My VPS keeps crashing at night', 'How to secure my crypto wallet?', 'My trading bot has false signals', 'Analyze this project architecture'].map(s => (
+                    <button key={s} style={P.suggestBtn} onClick={() => { setInput(s); inputRef.current?.focus(); }}>{s}</button>
                   ))}
                 </div>
               </div>
@@ -252,28 +246,28 @@ export default function Home() {
             {messages.map((msg, i) => (
               <div key={i}>
                 {msg.role === 'user' ? (
-                  <div style={S.msgRow}>
-                    <div style={S.avatarUser}>You</div>
-                    <div style={S.bubbleUser}>{msg.content}</div>
+                  <div style={P.msgRow}>
+                    {!isMobile && <div style={P.avatarUser}>You</div>}
+                    <div style={P.bubbleUser}>{msg.content}</div>
                   </div>
                 ) : (
-                  <div style={S.msgRow}>
-                    <div style={S.avatarBot}>DIG</div>
-                    <div style={S.msgCol}>
+                  <div style={P.msgRow}>
+                    {!isMobile && <div style={P.avatarBot}>DIG</div>}
+                    <div style={P.msgCol}>
                       {msg.error ? (
-                        <div style={S.bubbleBot}><span style={{color:'#ef4444'}}>{msg.error}</span></div>
+                        <div style={P.bubbleBot}><span style={{color:'#ef4444'}}>{msg.error}</span></div>
                       ) : msg.content ? (
-                        <div style={S.bubbleBot}>
-                          {/* Pillar 1: Meta Status + FRI */}
+                        <div style={P.bubbleBot}>
+                          {/* Meta Status + FRI */}
                           {msg.content.metaStatus && (
-                            <div style={S.metaBanner}>
-                              <div style={S.metaIcon}>{FOCUS_ICONS[msg.content.metaStatus.focus] || '🧠'}</div>
-                              <div style={S.metaTexts}>
-                                <span style={S.metaFocus}>FOCUS: {msg.content.metaStatus.focus?.toUpperCase()}</span>
-                                <span style={S.metaRationale}>{msg.content.metaStatus.rationale}</span>
+                            <div style={P.metaBanner}>
+                              <div style={P.metaIcon}>{FOCUS_ICONS[msg.content.metaStatus.focus] || '🧠'}</div>
+                              <div style={P.metaTexts}>
+                                <span style={P.metaFocus}>FOCUS: {msg.content.metaStatus.focus?.toUpperCase()}</span>
+                                <span style={P.metaRationale}>{msg.content.metaStatus.rationale}</span>
                               </div>
                               {msg.content.metaStatus.friScore !== undefined && (
-                                <div style={{...S.friMini, color: msg.fri?.color || '#71717a'}}>
+                                <div style={{...P.friMini, color: msg.fri?.color || '#71717a'}}>
                                   {msg.fri?.icon || '⚪'} {msg.content.metaStatus.friScore}
                                 </div>
                               )}
@@ -281,27 +275,27 @@ export default function Home() {
                           )}
 
                           {/* Diagnosis */}
-                          <div style={S.section}>
-                            <div style={S.sectionLabel}>DIAGNOSIS</div>
-                            <div style={S.diagnosis}>{msg.content.diagnosis}</div>
+                          <div style={P.section}>
+                            <div style={P.sectionLabel}>DIAGNOSIS</div>
+                            <div style={P.diagnosis}>{msg.content.diagnosis}</div>
                           </div>
 
                           {/* Analysis */}
-                          <div style={S.section}>
-                            <div style={S.sectionLabel}>ANALYSIS</div>
-                            <div style={S.analysis}>{msg.content.analysis}</div>
+                          <div style={P.section}>
+                            <div style={P.sectionLabel}>ANALYSIS</div>
+                            <div style={P.analysis}>{msg.content.analysis}</div>
                           </div>
 
-                          {/* Pillar 2: Cross-Links */}
+                          {/* Cross-Links */}
                           {msg.content.crossLinks?.length > 0 && (
-                            <div style={S.section}>
-                              <div style={S.sectionLabel}>🔗 CROSS-LINKS</div>
-                              <div style={S.crossLinks}>
+                            <div style={P.section}>
+                              <div style={P.sectionLabel}>🔗 CROSS-LINKS</div>
+                              <div style={P.crossLinks}>
                                 {msg.content.crossLinks.map((cl, j) => (
-                                  <div key={j} style={S.crossLinkCard}>
-                                    <div style={S.clArea}>{cl.area}</div>
-                                    <div style={S.clWhy}>{cl.why}</div>
-                                    <div style={S.clAction}>→ {cl.action}</div>
+                                  <div key={j} style={P.crossLinkCard}>
+                                    <div style={P.clArea}>{cl.area}</div>
+                                    <div style={P.clWhy}>{cl.why}</div>
+                                    <div style={P.clAction}>→ {cl.action}</div>
                                   </div>
                                 ))}
                               </div>
@@ -309,54 +303,46 @@ export default function Home() {
                           )}
 
                           {/* Action Plan */}
-                          <div style={S.section}>
-                            <div style={S.sectionLabel}>ACTION PLAN</div>
-                            <div style={S.planList}>
+                          <div style={P.section}>
+                            <div style={P.sectionLabel}>ACTION PLAN</div>
+                            <div style={P.planList}>
                               {msg.content.actionPlan.map((step, j) => (
                                 <div key={j} style={{
-                                  ...S.planItem,
-                                  ...(step.startsWith('[FRI]') ? S.friVerifyStep : {})
+                                  ...P.planItem,
+                                  ...(step.startsWith('[FRI]') ? P.friVerifyStep : {})
                                 }}>
-                                  <div style={S.planNum}>{j + 1}</div>
+                                  <div style={P.planNum}>{j + 1}</div>
                                   <span>{step.replace(/^\[FRI\]\s*/, '')}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          {/* Risk Notes */}
+                          {/* Risk */}
                           {msg.content.riskNotes?.length > 0 && (
-                            <div style={S.section}>
-                              <div style={S.sectionLabel}>⚠️ RISKS</div>
+                            <div style={P.section}>
+                              <div style={P.sectionLabel}>⚠️ RISKS</div>
                               {msg.content.riskNotes.map((r, j) => (
-                                <div key={j} style={S.riskItem}>{r}</div>
+                                <div key={j} style={P.riskItem}>{r}</div>
                               ))}
                             </div>
                           )}
 
                           {/* Meta footer */}
-                          <div style={S.resultFooter}>
+                          <div style={P.resultFooter}>
                             <span>Confidence: <strong style={{color: msg.content.confidence > 75 ? '#22c55e' : msg.content.confidence > 50 ? '#eab308' : '#ef4444'}}>{msg.content.confidence}%</strong></span>
-                            <div style={S.footerRight}>
+                            <div style={P.footerRight}>
                               {msg.fri && <span style={{color: msg.fri.color}}>FRI: {msg.fri.score}</span>}
-                              {msg.meta && <span>{msg.meta.model} · {msg.meta.tokens}t</span>}
+                              {msg.meta && <span>{msg.meta.model?.split('/')[1] || msg.meta.model} · {msg.meta.tokens}t</span>}
                             </div>
                           </div>
 
-                          {/* Pillar 3: Feedback */}
-                          <div style={S.feedbackRow}>
-                            <span style={S.feedbackLabel}>Was this helpful?</span>
-                            <button
-                              onClick={() => handleFeedback(i, 'up')}
-                              style={{ ...S.thumbBtn, ...(msg.feedback === 'up' ? S.thumbActiveUp : {}) }}
-                            >👍</button>
-                            <button
-                              onClick={() => handleFeedback(i, 'down')}
-                              style={{ ...S.thumbBtn, ...(msg.feedback === 'down' ? S.thumbActiveDown : {}) }}
-                            >👎</button>
-                            {msg.feedback && (
-                              <span style={S.feedbackThanks}>Thanks for your feedback!</span>
-                            )}
+                          {/* Feedback */}
+                          <div style={P.feedbackRow}>
+                            <span style={P.feedbackLabel}>Helpful?</span>
+                            <button onClick={() => handleFeedback(i, 'up')} style={{ ...P.thumbBtn, ...(msg.feedback === 'up' ? P.thumbActiveUp : {}) }}>👍</button>
+                            <button onClick={() => handleFeedback(i, 'down')} style={{ ...P.thumbBtn, ...(msg.feedback === 'down' ? P.thumbActiveDown : {}) }}>👎</button>
+                            {msg.feedback && <span style={P.feedbackThanks}>Thanks!</span>}
                           </div>
                         </div>
                       ) : null}
@@ -367,11 +353,11 @@ export default function Home() {
             ))}
 
             {loading && (
-              <div style={S.msgRow}>
-                <div style={S.avatarBot}>DIG</div>
-                <div style={S.bubbleBot}>
-                  <div style={S.typing}>
-                    <span style={S.dot} /><span style={{...S.dot, animationDelay:'0.2s'}} /><span style={{...S.dot, animationDelay:'0.4s'}} />
+              <div style={P.msgRow}>
+                {!isMobile && <div style={P.avatarBot}>DIG</div>}
+                <div style={P.bubbleBot}>
+                  <div style={P.typing}>
+                    <span style={P.dot} /><span style={{...P.dot, animationDelay:'0.2s'}} /><span style={{...P.dot, animationDelay:'0.4s'}} />
                   </div>
                 </div>
               </div>
@@ -380,20 +366,20 @@ export default function Home() {
           </div>
 
           {/* Input */}
-          <div style={S.inputArea}>
-            <form onSubmit={handleSubmit} style={S.inputForm}>
-              <div style={S.inputRow}>
+          <div style={P.inputArea}>
+            <form onSubmit={handleSubmit} style={P.inputForm}>
+              <div style={P.inputRow}>
                 <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown} placeholder="Describe your problem..."
-                  style={S.inputField} rows={1} />
+                  style={P.inputField} rows={1} />
                 <button type="submit" disabled={!input.trim() || loading}
-                  style={{ ...S.sendBtn, ...((!input.trim() || loading) ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}>
+                  style={{ ...P.sendBtn, ...((!input.trim() || loading) ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                   </svg>
                 </button>
               </div>
-              <p style={S.disclaimer}>DIG v2.0 · FRI-Modulated Engine · Powered by OpenRouter</p>
+              {!isMobile && <p style={P.disclaimer}>DIG v2.1 · FRI-Modulated Engine · Powered by OpenRouter</p>}
             </form>
           </div>
         </main>
@@ -401,43 +387,43 @@ export default function Home() {
 
       <style>{`
         @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-        *{box-sizing:border-box}
-        body{margin:0;padding:0;overflow:hidden}
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{margin:0;padding:0;overflow:hidden;-webkit-tap-highlight-color:transparent}
         textarea{resize:none}
-        ::-webkit-scrollbar{width:6px}
+        ::-webkit-scrollbar{width:5px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:3px}
+        button{touch-action:manipulation}
       `}</style>
     </>
   );
 }
 
+
 // ═══════════════════════════════════════════
-// Styles
+// DESKTOP STYLES (>=768px)
 // ═══════════════════════════════════════════
-const S = {
+const DP = {
   page: { display:'flex', height:'100vh', fontFamily:"'Inter',-apple-system,sans-serif", background:'#09090b', color:'#e4e4e7', overflow:'hidden' },
+  overlay: { display:'none' },
 
   // Sidebar
-  sidebar: { width:260, background:'#111113', borderRight:'1px solid #1f1f23', display:'flex', flexDirection:'column', flexShrink:0 },
+  sidebar: { width:260, background:'#111113', borderRight:'1px solid #1f1f23', display:'flex', flexDirection:'column', flexShrink:0, transition:'transform 0.3s ease' },
   sidebarHeader: { display:'flex', alignItems:'center', gap:10, padding:'16px 18px', borderBottom:'1px solid #1f1f23' },
   logo: { fontSize:22, fontWeight:700, color:'#3b82f6' },
   logoText: { fontSize:18, fontWeight:700, color:'#fafafa', letterSpacing:'-0.02em' },
+  closeBtn: { display:'none' },
   sidebarNew: { display:'flex', alignItems:'center', gap:10, padding:'12px 18px', margin:'12px 10px', background:'#1a1a1f', border:'1px solid #27272a', borderRadius:8, fontSize:13, color:'#d4d4d8', cursor:'pointer' },
   plusIcon: { fontSize:16, color:'#71717a' },
   sidebarHistory: { flex:1, padding:'8px 10px', overflowY:'auto' },
   sidebarEmpty: { fontSize:12, color:'#3f3f46', textAlign:'center', padding:'20px 0' },
   sidebarItem: { fontSize:13, color:'#d4d4d8', padding:'10px 12px', background:'#1a1a1f', borderRadius:6, borderLeft:'2px solid #3b82f6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' },
-
-  // FRI Sidebar
-  friSidebar: { padding:'14px 18px', borderTop:'1px solid #1f1f23', borderBottom:'1px solid #1f1f23', margin:'0 0 0 0' },
+  friSidebar: { padding:'14px 18px', borderTop:'1px solid #1f1f23', borderBottom:'1px solid #1f1f23' },
   friLabel: { fontSize:9, fontWeight:700, color:'#52525b', letterSpacing:'0.15em', marginBottom:6 },
   friScoreSidebar: { fontSize:32, fontWeight:700, lineHeight:1 },
   friLevelSidebar: { fontSize:11, fontWeight:600, marginTop:2 },
   friBarOuter: { width:'100%', height:4, background:'#1f1f23', borderRadius:2, marginTop:8 },
   friBarInner: { height:'100%', borderRadius:2, transition:'width 0.5s ease' },
-
   sidebarFooter: { padding:'14px 18px', borderTop:'1px solid #1f1f23', display:'flex', alignItems:'center', gap:8 },
   statusDot: { width:8, height:8, borderRadius:'50%' },
   footerText: { fontSize:11, color:'#52525b' },
@@ -446,9 +432,9 @@ const S = {
   main: { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
   topbar: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 24px', borderBottom:'1px solid #1f1f23', flexShrink:0 },
   topbarLeft: { display:'flex', alignItems:'center', gap:12 },
+  hamburger: { display:'none' },
   topbarTitle: { fontSize:14, fontWeight:600, color:'#fafafa' },
   friBadge: { display:'flex', flexDirection:'column', alignItems:'center', border:'1px solid', borderRadius:8, padding:'4px 10px', lineHeight:1.2 },
-
   settingsBtn: { background:'transparent', border:'1px solid #27272a', borderRadius:6, padding:'6px 12px', fontSize:12, color:'#a1a1aa', cursor:'pointer', fontFamily:'inherit' },
 
   // Settings
@@ -459,7 +445,6 @@ const S = {
   pill: { padding:'4px 12px', borderRadius:16, border:'1px solid #27272a', background:'transparent', color:'#71717a', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize' },
   friDetail: { display:'flex', gap:12, fontSize:11, color:'#71717a' },
 
-  // Messages
   messages: { flex:1, overflowY:'auto', padding:'0 0 20px 0' },
 
   // Welcome
@@ -467,18 +452,14 @@ const S = {
   welcomeIcon: { fontSize:40, color:'#3b82f6', marginBottom:16 },
   welcomeTitle: { fontSize:24, fontWeight:700, color:'#fafafa', margin:'0 0 8px 0' },
   welcomeSub: { fontSize:14, color:'#71717a', margin:'0 0 20px 0' },
-
-  // FRI Welcome Card
   friWelcomeCard: { background:'#111113', border:'1px solid', borderRadius:12, padding:'16px 20px', marginBottom:24, width:'100%', maxWidth:420 },
   friWelcomeRow: { display:'flex', alignItems:'center', gap:12 },
   friWelcomeScore: { fontSize:18, fontWeight:700 },
   friWelcomeDesc: { fontSize:12, color:'#71717a' },
   friWelcomeStats: { fontSize:11, color:'#52525b', marginTop:8, paddingTop:8, borderTop:'1px solid #1f1f23' },
-
   suggestions: { display:'flex', flexDirection:'column', gap:8, maxWidth:420, width:'100%' },
   suggestBtn: { background:'#111113', border:'1px solid #27272a', borderRadius:10, padding:'12px 16px', fontSize:13, color:'#a1a1aa', textAlign:'left', cursor:'pointer', fontFamily:'inherit' },
 
-  // Message Rows
   msgRow: { display:'flex', padding:'8px 24px', gap:12, alignItems:'flex-start' },
   msgCol: { flex:1, minWidth:0 },
   avatarUser: { width:32, height:32, borderRadius:'50%', background:'#3b82f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0 },
@@ -486,7 +467,6 @@ const S = {
   bubbleUser: { background:'#2563eb', borderRadius:'18px 18px 4px 18px', padding:'10px 16px', fontSize:14, lineHeight:1.6, color:'#fff', maxWidth:'70%', wordBreak:'break-word' },
   bubbleBot: { background:'#141416', border:'1px solid #1f1f23', borderRadius:'18px 18px 18px 4px', padding:'14px 18px', fontSize:14, lineHeight:1.7, color:'#d4d4d8', maxWidth:'80%', wordBreak:'break-word' },
 
-  // Meta Status Banner
   metaBanner: { display:'flex', alignItems:'center', gap:10, background:'#111113', border:'1px solid #1f1f23', borderRadius:8, padding:'10px 14px', marginBottom:14 },
   metaIcon: { fontSize:18, flexShrink:0 },
   metaTexts: { display:'flex', flexDirection:'column', gap:2, flex:1 },
@@ -494,33 +474,27 @@ const S = {
   metaRationale: { fontSize:11, color:'#71717a', lineHeight:1.4 },
   friMini: { fontSize:12, fontWeight:700, flexShrink:0, borderLeft:'1px solid #1f1f23', paddingLeft:10, textAlign:'center', lineHeight:1.2 },
 
-  // Sections
   section: { marginBottom:14 },
   sectionLabel: { fontSize:11, fontWeight:700, color:'#71717a', letterSpacing:'0.1em', marginBottom:6 },
   diagnosis: { fontSize:15, fontWeight:600, color:'#fafafa', lineHeight:1.5, borderLeft:'3px solid #ef4444', paddingLeft:12 },
   analysis: { fontSize:13, lineHeight:1.7, color:'#d4d4d8' },
 
-  // Cross-Links
   crossLinks: { display:'flex', flexDirection:'column', gap:8 },
   crossLinkCard: { background:'#111113', border:'1px solid #1f1f23', borderRadius:8, padding:'10px 14px' },
   clArea: { fontSize:12, fontWeight:600, color:'#3b82f6', marginBottom:3 },
   clWhy: { fontSize:12, color:'#71717a', marginBottom:3 },
   clAction: { fontSize:12, color:'#a1a1aa' },
 
-  // Action Plan
   planList: { display:'flex', flexDirection:'column', gap:8 },
   planItem: { display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color:'#d4d4d8' },
-  friVerifyStep: { background:'#7f1d1d15', border:'1px solid #ef444430', borderRadius:6, padding:'6px 8px', marginLeft:0 },
+  friVerifyStep: { background:'#7f1d1d15', border:'1px solid #ef444430', borderRadius:6, padding:'6px 8px' },
   planNum: { width:22, height:22, borderRadius:11, background:'#16a34a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0 },
 
-  // Risk
   riskItem: { fontSize:13, color:'#fbbf24', marginBottom:4, paddingLeft:4 },
 
-  // Footer
   resultFooter: { display:'flex', justifyContent:'space-between', borderTop:'1px solid #1f1f23', marginTop:12, paddingTop:8, fontSize:11, color:'#3f3f46' },
   footerRight: { display:'flex', gap:12 },
 
-  // Feedback
   feedbackRow: { display:'flex', alignItems:'center', gap:8, marginTop:10, paddingTop:10, borderTop:'1px solid #1f1f23' },
   feedbackLabel: { fontSize:12, color:'#52525b', marginRight:4 },
   thumbBtn: { background:'transparent', border:'1px solid #27272a', borderRadius:6, padding:'4px 10px', fontSize:16, cursor:'pointer', transition:'all 0.15s' },
@@ -528,15 +502,90 @@ const S = {
   thumbActiveDown: { background:'#7f1d1d', borderColor:'#ef4444' },
   feedbackThanks: { fontSize:11, color:'#22c55e', marginLeft:4 },
 
-  // Typing
   typing: { display:'flex', gap:4, padding:'4px 0' },
   dot: { width:7, height:7, borderRadius:'50%', background:'#52525b', animation:'bounce 1.2s infinite' },
 
-  // Input
   inputArea: { padding:'0 24px 16px', flexShrink:0 },
   inputForm: { maxWidth:768, margin:'0 auto' },
   inputRow: { display:'flex', alignItems:'flex-end', background:'#111113', border:'1px solid #27272a', borderRadius:14, padding:'6px 6px 6px 16px' },
   inputField: { flex:1, background:'transparent', border:'none', outline:'none', color:'#fafafa', fontSize:14, fontFamily:'inherit', padding:'8px 0', lineHeight:1.5, maxHeight:120 },
   sendBtn: { width:36, height:36, borderRadius:10, background:'#3b82f6', border:'none', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 },
   disclaimer: { fontSize:11, color:'#3f3f46', textAlign:'center', margin:'8px 0 0 0' },
+};
+
+
+// ═══════════════════════════════════════════
+// MOBILE STYLES (<768px)
+// ═══════════════════════════════════════════
+const MP = {
+  ...DP,
+  page: { ...DP.page, overflow:'hidden' },
+  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:99, WebkitTapHighlightColor:'transparent' },
+
+  // Sidebar: slide-in overlay on mobile
+  sidebar: { ...DP.sidebar, width:280, position:'fixed', top:0, left:0, bottom:0, zIndex:100, transform:'translateX(-100%)', transition:'transform 0.25s ease' },
+  sidebarHeader: { ...DP.sidebarHeader, padding:'14px 16px' },
+  closeBtn: { display:'block', marginLeft:'auto', fontSize:18, color:'#71717a', cursor:'pointer', padding:'4px 8px' },
+  sidebarNew: { ...DP.sidebarNew, margin:'10px 12px', padding:'10px 14px' },
+
+  // Topbar
+  topbar: { ...DP.topbar, padding:'10px 14px' },
+  hamburger: { display:'block', background:'transparent', border:'1px solid #27272a', borderRadius:6, padding:'6px 10px', fontSize:18, color:'#a1a1aa', cursor:'pointer', lineHeight:1 },
+  topbarTitle: { fontSize:14, fontWeight:600, color:'#fafafa' },
+  friBadge: { ...DP.friBadge, padding:'3px 8px' },
+
+  settingsBtn: { ...DP.settingsBtn, padding:'6px 10px', fontSize:11 },
+  settingsPanel: { padding:'12px 14px', background:'#111113', borderBottom:'1px solid #1f1f23', display:'flex', flexDirection:'column', gap:12, flexShrink:0 },
+  pillGroup: { display:'flex', gap:5, flexWrap:'wrap' },
+  pill: { padding:'4px 10px', fontSize:10 },
+
+  messages: { ...DP.messages, padding:'0 0 12px 0' },
+
+  // Welcome
+  welcome: { ...DP.welcome, padding:'24px 16px' },
+  welcomeIcon: { fontSize:32, color:'#3b82f6', marginBottom:12 },
+  welcomeTitle: { fontSize:20, fontWeight:700, color:'#fafafa', margin:'0 0 6px 0' },
+  welcomeSub: { fontSize:13, color:'#71717a', margin:'0 0 16px 0' },
+  friWelcomeCard: { ...DP.friWelcomeCard, padding:'12px 16px', marginBottom:16, maxWidth:'100%' },
+  friWelcomeScore: { fontSize:16, fontWeight:700 },
+  suggestions: { ...DP.suggestions, maxWidth:'100%' },
+  suggestBtn: { ...DP.suggestBtn, padding:'10px 14px', fontSize:12 },
+
+  // Messages
+  msgRow: { padding:'6px 12px', gap:8 },
+  bubbleUser: { ...DP.bubbleUser, fontSize:13, padding:'8px 12px', maxWidth:'85%', borderRadius:'14px 14px 4px 14px' },
+  bubbleBot: { ...DP.bubbleBot, fontSize:13, padding:'10px 12px', maxWidth:'95%', borderRadius:'14px 14px 14px 4px' },
+
+  metaBanner: { flexDirection:'row', flexWrap:'wrap', gap:8, padding:'8px 10px', marginBottom:10 },
+  metaIcon: { fontSize:16 },
+  metaFocus: { fontSize:9 },
+  metaRationale: { fontSize:10 },
+  friMini: { borderLeft:'none', paddingLeft:0, borderLeft:'1px solid #1f1f23', paddingLeft:8 },
+
+  section: { marginBottom:12 },
+  sectionLabel: { fontSize:10, marginBottom:4 },
+  diagnosis: { fontSize:14, paddingLeft:10 },
+  analysis: { fontSize:12, lineHeight:1.6 },
+
+  crossLinkCard: { padding:'8px 10px' },
+  clArea: { fontSize:11 },
+  clWhy: { fontSize:11 },
+  clAction: { fontSize:11 },
+
+  planItem: { fontSize:12, gap:8 },
+  planNum: { width:20, height:20, borderRadius:10, fontSize:10 },
+  riskItem: { fontSize:12 },
+
+  resultFooter: { flexDirection:'column', gap:4, fontSize:10 },
+  footerRight: { gap:8 },
+
+  feedbackRow: { ...DP.feedbackRow, flexWrap:'wrap', gap:6 },
+  feedbackLabel: { fontSize:11 },
+
+  // Input
+  inputArea: { padding:'0 12px 12px', flexShrink:0 },
+  inputForm: { maxWidth:'100%', margin:'0 auto' },
+  inputRow: { padding:'4px 4px 4px 12px', borderRadius:12 },
+  inputField: { fontSize:16, padding:'6px 0' },
+  sendBtn: { width:34, height:34, borderRadius:8 },
 };

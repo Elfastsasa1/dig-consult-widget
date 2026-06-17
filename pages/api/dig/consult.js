@@ -1,10 +1,9 @@
 // API Route: POST /api/dig/consult
-// Handles consultation requests from the DIG Chat Widget
+// Three Pillars consultation: Self-Knowledge + Cross-Linker + Feedback Loop
 
 import { consultLLM } from '../../../lib/dig-engine';
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -16,8 +15,7 @@ export default async function handler(req, res) {
 
   if (!topic) {
     return res.status(400).json({
-      error: 'Missing required field: topic (or context)',
-      required: ['topic'],
+      error: 'Missing required field: topic',
       optional: ['context', 'urgency', 'depth'],
     });
   }
@@ -39,8 +37,10 @@ export default async function handler(req, res) {
       success: true,
       input: { topic: input.topic, urgency: input.urgency, depth: input.depth },
       result: {
+        metaStatus: result.metaStatus,
         diagnosis: result.diagnosis,
         analysis: result.analysis,
+        crossLinks: result.crossLinks,
         actionPlan: result.actionPlan,
         riskNotes: result.riskNotes,
         confidence: result.confidence,

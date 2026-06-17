@@ -387,13 +387,20 @@ export default function Home() {
 
       <style>{`
         @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{margin:0;padding:0;overflow:hidden;-webkit-tap-highlight-color:transparent}
-        textarea{resize:none}
+        *{box-sizing:border-box}
+        html,body,#__next{margin:0;padding:0;height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent}
+        html{height:100%;height:-webkit-fill-available}
+        body{min-height:100vh;min-height:-webkit-fill-available}
+        textarea{resize:none;margin:0;padding:0;border:none;outline:none;background:transparent;font-family:inherit;color:#fafafa;font-size:16px;-webkit-appearance:none;appearance:none}
+        textarea:focus{outline:none;border:none}
+        input,textarea{-webkit-border-radius:0;border-radius:0}
         ::-webkit-scrollbar{width:5px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:3px}
-        button{touch-action:manipulation}
+        button{touch-action:manipulation;-webkit-appearance:none;appearance:none}
+        @supports (padding-bottom:env(safe-area-inset-bottom)){
+          .dig-input-safe{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+        }
       `}</style>
     </>
   );
@@ -582,10 +589,10 @@ const MP = {
   feedbackRow: { ...DP.feedbackRow, flexWrap:'wrap', gap:6 },
   feedbackLabel: { fontSize:11 },
 
-  // Input
-  inputArea: { padding:'0 12px 12px', flexShrink:0 },
+  // Input — critical mobile fixes
+  inputArea: { padding:'8px 12px', paddingBottom:'max(8px, env(safe-area-inset-bottom))', flexShrink:0, background:'#09090b', borderTop:'1px solid #1f1f23', position:'relative', zIndex:10 },
   inputForm: { maxWidth:'100%', margin:'0 auto' },
-  inputRow: { padding:'4px 4px 4px 12px', borderRadius:12 },
-  inputField: { fontSize:16, padding:'6px 0' },
-  sendBtn: { width:34, height:34, borderRadius:8 },
+  inputRow: { display:'flex', alignItems:'flex-end', background:'#111113', border:'1px solid #27272a', borderRadius:14, padding:'6px 6px 6px 14px', minHeight:44 },
+  inputField: { flex:1, background:'transparent', border:'none', outline:'none', color:'#fafafa', fontSize:16, fontFamily:'inherit', padding:'8px 0', lineHeight:1.5, maxHeight:120, WebkitAppearance:'none', appearance:'none', WebkitTapHighlightColor:'transparent', wordBreak:'break-word', overflowWrap:'break-word' },
+  sendBtn: { width:36, height:36, borderRadius:10, background:'#3b82f6', border:'none', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, WebkitTapHighlightColor:'transparent' },
 };

@@ -1,7 +1,9 @@
 // API Route: POST /api/dig/consult
 // Three Pillars consultation: Self-Knowledge + Cross-Linker + Feedback Loop
+// v2.0: FRI-Modulated Edition
 
 import { consultLLM } from '../../../lib/dig-engine';
+import { calculateFRI } from '../../../lib/fri';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,6 +33,9 @@ export default async function handler(req, res) {
   };
 
   try {
+    // Calculate FRI for pre-call context
+    const friData = calculateFRI();
+
     const result = await consultLLM(input);
 
     return res.status(200).json({
@@ -44,6 +49,14 @@ export default async function handler(req, res) {
         actionPlan: result.actionPlan,
         riskNotes: result.riskNotes,
         confidence: result.confidence,
+      },
+      fri: {
+        score: friData.score,
+        level: friData.level,
+        icon: friData.icon,
+        color: friData.color,
+        description: friData.description,
+        breakdown: friData.breakdown,
       },
       meta: result._meta,
     });

@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 
 // ═══════════════════════════════════════════
-// DIG Chat Widget — Three Pillars Edition
+// DIG Chat Widget v2.0 — FRI-Modulated Edition
 // Pillar 1: Meta-Cognitive Status Banner
 // Pillar 2: Cross-Linker in responses
 // Pillar 3: Feedback Loop (Thumbs Up/Down)
+// NEW: FRI Gauge — System Health Indicator
 // ═══════════════════════════════════════════
 
 const FOCUS_ICONS = { resilience: '🛡️', efficiency: '⚡', speed: '🚀', caution: '🔍', exploration: '🧭' };
@@ -17,12 +18,29 @@ export default function Home() {
   const [urgency, setUrgency] = useState('medium');
   const [depth, setDepth] = useState('normal');
   const [showSettings, setShowSettings] = useState(false);
-  const [metaStatus, setMetaStatus] = useState(null);
+  const [fri, setFri] = useState(null);
+  const [friHistory, setFriHistory] = useState([]);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
+
+  // Fetch initial FRI
+  useEffect(() => {
+    fetchFRI();
+  }, []);
+
+  const fetchFRI = async () => {
+    try {
+      const res = await fetch('/api/dig/fri');
+      const data = await res.json();
+      if (data.success && data.fri) {
+        setFri(data.fri);
+        setFriHistory(prev => [...prev.slice(-20), { score: data.fri.score, time: Date.now() }]);
+      }
+    } catch (e) { /* silent */ }
+  };
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -42,11 +60,16 @@ export default function Home() {
       const data = await res.json();
 
       if (data.success && data.result) {
-        setMetaStatus(data.result.metaStatus);
+        // Update FRI from response
+        if (data.fri) {
+          setFri(data.fri);
+          setFriHistory(prev => [...prev.slice(-20), { score: data.fri.score, time: Date.now() }]);
+        }
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: data.result,
           meta: data.meta,
+          fri: data.fri,
           feedback: null,
         }]);
       } else {
@@ -63,8 +86,6 @@ export default function Home() {
   const handleFeedback = async (msgIdx, rating) => {
     const msg = messages[msgIdx];
     if (!msg || msg.feedback === rating) return;
-
-    // Optimistic update
     setMessages(prev => prev.map((m, i) => i === msgIdx ? { ...m, feedback: rating } : m));
 
     try {
@@ -78,6 +99,8 @@ export default function Home() {
           rating,
         }),
       });
+      // Refresh FRI after feedback
+      setTimeout(fetchFRI, 500);
     } catch (e) { /* feedback failed silently */ }
   };
 
@@ -100,7 +123,7 @@ export default function Home() {
             <div style={S.logo}>⬡</div>
             <span style={S.logoText}>DIG</span>
           </div>
-          <div style={S.sidebarNew} onClick={() => { setMessages([]); setMetaStatus(null); }}>
+          <div style={S.sidebarNew} onClick={() => { setMessages([]); }}>
             <span style={S.plusIcon}>+</span> New Chat
           </div>
           <div style={S.sidebarHistory}>
@@ -112,17 +135,44 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* FRI Sidebar Indicator */}
+          {fri && (
+            <div style={S.friSidebar}>
+              <div style={S.friLabel}>SYSTEM HEALTH</div>
+              <div style={{...S.friScoreSidebar, color: fri.color}}>{fri.score}</div>
+              <div style={{...S.friLevelSidebar, color: fri.color}}>
+                {fri.icon} {fri.level}
+              </div>
+              <div style={S.friBarOuter}>
+                <div style={{...S.friBarInner, width: `${fri.score}%`, background: fri.color}} />
+              </div>
+            </div>
+          )}
+
           <div style={S.sidebarFooter}>
-            <div style={S.statusDot} />
-            <span style={S.footerText}>DIG v1.0 · Three Pillars</span>
+            <div style={{...S.statusDot, background: fri ? fri.color : '#22c55e'}} />
+            <span style={S.footerText}>DIG v2.0 · FRI-Modulated</span>
           </div>
         </aside>
 
         {/* Main */}
         <main style={S.main}>
-          {/* Top Bar */}
+          {/* Top Bar with FRI */}
           <header style={S.topbar}>
-            <span style={S.topbarTitle}>DIG Consultation</span>
+            <div style={S.topbarLeft}>
+              <span style={S.topbarTitle}>DIG Consultation</span>
+              {fri && (
+                <div style={{...S.friBadge, borderColor: fri.color + '60'}}>
+                  <span style={{color: fri.color, fontSize: 11, fontWeight: 700}}>
+                    {fri.icon} FRI: {fri.score}
+                  </span>
+                  <span style={{color: '#71717a', fontSize: 10}}>
+                    {fri.level}
+                  </span>
+                </div>
+              )}
+            </div>
             <button style={S.settingsBtn} onClick={() => setShowSettings(!showSettings)}>
               ⚙ Settings
             </button>
@@ -151,6 +201,17 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+              {fri && (
+                <div style={S.settingsRow}>
+                  <span style={S.settingsLabel}>FRI Detail</span>
+                  <div style={S.friDetail}>
+                    <span>Satisfaction: {fri.breakdown?.satisfaction}%</span>
+                    <span>Trend: {fri.breakdown?.trend}</span>
+                    <span>Volume: {fri.breakdown?.volume}</span>
+                    <span>Consistency: {fri.breakdown?.consistency}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -160,7 +221,26 @@ export default function Home() {
               <div style={S.welcome}>
                 <div style={S.welcomeIcon}>⬡</div>
                 <h2 style={S.welcomeTitle}>How can I help you today?</h2>
-                <p style={S.welcomeSub}>Diagnosis-first analysis powered by three pillars of intelligence.</p>
+                <p style={S.welcomeSub}>Diagnosis-first analysis powered by three pillars of intelligence and the FRI resilience system.</p>
+
+                {/* FRI Status Card */}
+                {fri && (
+                  <div style={{...S.friWelcomeCard, borderColor: fri.color + '40'}}>
+                    <div style={S.friWelcomeRow}>
+                      <span style={{fontSize: 24}}>{fri.icon}</span>
+                      <div>
+                        <div style={{...S.friWelcomeScore, color: fri.color}}>FRI: {fri.score}/100</div>
+                        <div style={S.friWelcomeDesc}>{fri.description}</div>
+                      </div>
+                    </div>
+                    {fri.stats?.totalInteractions > 0 && (
+                      <div style={S.friWelcomeStats}>
+                        {fri.stats.totalInteractions} interactions · {fri.stats.satisfactionRate}% satisfaction
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={S.suggestions}>
                   {['My VPS keeps crashing at night', 'How to secure my crypto wallet?', 'My trading bot has too many false signals', 'Analyze this project architecture'].map(s => (
                     <button key={s} style={S.suggestBtn} onClick={() => { setInput(s); inputRef.current?.focus(); }}>{s}</button>
@@ -184,7 +264,7 @@ export default function Home() {
                         <div style={S.bubbleBot}><span style={{color:'#ef4444'}}>{msg.error}</span></div>
                       ) : msg.content ? (
                         <div style={S.bubbleBot}>
-                          {/* Pillar 1: Meta Status */}
+                          {/* Pillar 1: Meta Status + FRI */}
                           {msg.content.metaStatus && (
                             <div style={S.metaBanner}>
                               <div style={S.metaIcon}>{FOCUS_ICONS[msg.content.metaStatus.focus] || '🧠'}</div>
@@ -192,6 +272,11 @@ export default function Home() {
                                 <span style={S.metaFocus}>FOCUS: {msg.content.metaStatus.focus?.toUpperCase()}</span>
                                 <span style={S.metaRationale}>{msg.content.metaStatus.rationale}</span>
                               </div>
+                              {msg.content.metaStatus.friScore !== undefined && (
+                                <div style={{...S.friMini, color: msg.fri?.color || '#71717a'}}>
+                                  {msg.fri?.icon || '⚪'} {msg.content.metaStatus.friScore}
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -228,9 +313,12 @@ export default function Home() {
                             <div style={S.sectionLabel}>ACTION PLAN</div>
                             <div style={S.planList}>
                               {msg.content.actionPlan.map((step, j) => (
-                                <div key={j} style={S.planItem}>
+                                <div key={j} style={{
+                                  ...S.planItem,
+                                  ...(step.startsWith('[FRI]') ? S.friVerifyStep : {})
+                                }}>
                                   <div style={S.planNum}>{j + 1}</div>
-                                  <span>{step}</span>
+                                  <span>{step.replace(/^\[FRI\]\s*/, '')}</span>
                                 </div>
                               ))}
                             </div>
@@ -248,8 +336,11 @@ export default function Home() {
 
                           {/* Meta footer */}
                           <div style={S.resultFooter}>
-                            <span>Confidence: <strong>{msg.content.confidence}%</strong></span>
-                            {msg.meta && <span>{msg.meta.model} · {msg.meta.tokens} tokens</span>}
+                            <span>Confidence: <strong style={{color: msg.content.confidence > 75 ? '#22c55e' : msg.content.confidence > 50 ? '#eab308' : '#ef4444'}}>{msg.content.confidence}%</strong></span>
+                            <div style={S.footerRight}>
+                              {msg.fri && <span style={{color: msg.fri.color}}>FRI: {msg.fri.score}</span>}
+                              {msg.meta && <span>{msg.meta.model} · {msg.meta.tokens}t</span>}
+                            </div>
                           </div>
 
                           {/* Pillar 3: Feedback */}
@@ -302,7 +393,7 @@ export default function Home() {
                   </svg>
                 </button>
               </div>
-              <p style={S.disclaimer}>DIG v1.0 · Three Pillars Engine · Powered by OpenRouter</p>
+              <p style={S.disclaimer}>DIG v2.0 · FRI-Modulated Engine · Powered by OpenRouter</p>
             </form>
           </div>
         </main>
@@ -310,6 +401,7 @@ export default function Home() {
 
       <style>{`
         @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
         *{box-sizing:border-box}
         body{margin:0;padding:0;overflow:hidden}
         textarea{resize:none}
@@ -337,14 +429,26 @@ const S = {
   sidebarHistory: { flex:1, padding:'8px 10px', overflowY:'auto' },
   sidebarEmpty: { fontSize:12, color:'#3f3f46', textAlign:'center', padding:'20px 0' },
   sidebarItem: { fontSize:13, color:'#d4d4d8', padding:'10px 12px', background:'#1a1a1f', borderRadius:6, borderLeft:'2px solid #3b82f6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' },
+
+  // FRI Sidebar
+  friSidebar: { padding:'14px 18px', borderTop:'1px solid #1f1f23', borderBottom:'1px solid #1f1f23', margin:'0 0 0 0' },
+  friLabel: { fontSize:9, fontWeight:700, color:'#52525b', letterSpacing:'0.15em', marginBottom:6 },
+  friScoreSidebar: { fontSize:32, fontWeight:700, lineHeight:1 },
+  friLevelSidebar: { fontSize:11, fontWeight:600, marginTop:2 },
+  friBarOuter: { width:'100%', height:4, background:'#1f1f23', borderRadius:2, marginTop:8 },
+  friBarInner: { height:'100%', borderRadius:2, transition:'width 0.5s ease' },
+
   sidebarFooter: { padding:'14px 18px', borderTop:'1px solid #1f1f23', display:'flex', alignItems:'center', gap:8 },
-  statusDot: { width:8, height:8, borderRadius:'50%', background:'#22c55e' },
+  statusDot: { width:8, height:8, borderRadius:'50%' },
   footerText: { fontSize:11, color:'#52525b' },
 
   // Main
   main: { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
   topbar: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 24px', borderBottom:'1px solid #1f1f23', flexShrink:0 },
+  topbarLeft: { display:'flex', alignItems:'center', gap:12 },
   topbarTitle: { fontSize:14, fontWeight:600, color:'#fafafa' },
+  friBadge: { display:'flex', flexDirection:'column', alignItems:'center', border:'1px solid', borderRadius:8, padding:'4px 10px', lineHeight:1.2 },
+
   settingsBtn: { background:'transparent', border:'1px solid #27272a', borderRadius:6, padding:'6px 12px', fontSize:12, color:'#a1a1aa', cursor:'pointer', fontFamily:'inherit' },
 
   // Settings
@@ -353,6 +457,7 @@ const S = {
   settingsLabel: { fontSize:12, color:'#71717a', fontWeight:500, minWidth:55 },
   pillGroup: { display:'flex', gap:6 },
   pill: { padding:'4px 12px', borderRadius:16, border:'1px solid #27272a', background:'transparent', color:'#71717a', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize' },
+  friDetail: { display:'flex', gap:12, fontSize:11, color:'#71717a' },
 
   // Messages
   messages: { flex:1, overflowY:'auto', padding:'0 0 20px 0' },
@@ -361,7 +466,15 @@ const S = {
   welcome: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', padding:'40px 20px', textAlign:'center' },
   welcomeIcon: { fontSize:40, color:'#3b82f6', marginBottom:16 },
   welcomeTitle: { fontSize:24, fontWeight:700, color:'#fafafa', margin:'0 0 8px 0' },
-  welcomeSub: { fontSize:14, color:'#71717a', margin:'0 0 28px 0' },
+  welcomeSub: { fontSize:14, color:'#71717a', margin:'0 0 20px 0' },
+
+  // FRI Welcome Card
+  friWelcomeCard: { background:'#111113', border:'1px solid', borderRadius:12, padding:'16px 20px', marginBottom:24, width:'100%', maxWidth:420 },
+  friWelcomeRow: { display:'flex', alignItems:'center', gap:12 },
+  friWelcomeScore: { fontSize:18, fontWeight:700 },
+  friWelcomeDesc: { fontSize:12, color:'#71717a' },
+  friWelcomeStats: { fontSize:11, color:'#52525b', marginTop:8, paddingTop:8, borderTop:'1px solid #1f1f23' },
+
   suggestions: { display:'flex', flexDirection:'column', gap:8, maxWidth:420, width:'100%' },
   suggestBtn: { background:'#111113', border:'1px solid #27272a', borderRadius:10, padding:'12px 16px', fontSize:13, color:'#a1a1aa', textAlign:'left', cursor:'pointer', fontFamily:'inherit' },
 
@@ -373,12 +486,13 @@ const S = {
   bubbleUser: { background:'#2563eb', borderRadius:'18px 18px 4px 18px', padding:'10px 16px', fontSize:14, lineHeight:1.6, color:'#fff', maxWidth:'70%', wordBreak:'break-word' },
   bubbleBot: { background:'#141416', border:'1px solid #1f1f23', borderRadius:'18px 18px 18px 4px', padding:'14px 18px', fontSize:14, lineHeight:1.7, color:'#d4d4d8', maxWidth:'80%', wordBreak:'break-word' },
 
-  // Meta Status Banner (Pillar 1)
+  // Meta Status Banner
   metaBanner: { display:'flex', alignItems:'center', gap:10, background:'#111113', border:'1px solid #1f1f23', borderRadius:8, padding:'10px 14px', marginBottom:14 },
   metaIcon: { fontSize:18, flexShrink:0 },
-  metaTexts: { display:'flex', flexDirection:'column', gap:2 },
+  metaTexts: { display:'flex', flexDirection:'column', gap:2, flex:1 },
   metaFocus: { fontSize:10, fontWeight:700, color:'#3b82f6', letterSpacing:'0.1em' },
   metaRationale: { fontSize:11, color:'#71717a', lineHeight:1.4 },
+  friMini: { fontSize:12, fontWeight:700, flexShrink:0, borderLeft:'1px solid #1f1f23', paddingLeft:10, textAlign:'center', lineHeight:1.2 },
 
   // Sections
   section: { marginBottom:14 },
@@ -386,7 +500,7 @@ const S = {
   diagnosis: { fontSize:15, fontWeight:600, color:'#fafafa', lineHeight:1.5, borderLeft:'3px solid #ef4444', paddingLeft:12 },
   analysis: { fontSize:13, lineHeight:1.7, color:'#d4d4d8' },
 
-  // Cross-Links (Pillar 2)
+  // Cross-Links
   crossLinks: { display:'flex', flexDirection:'column', gap:8 },
   crossLinkCard: { background:'#111113', border:'1px solid #1f1f23', borderRadius:8, padding:'10px 14px' },
   clArea: { fontSize:12, fontWeight:600, color:'#3b82f6', marginBottom:3 },
@@ -396,6 +510,7 @@ const S = {
   // Action Plan
   planList: { display:'flex', flexDirection:'column', gap:8 },
   planItem: { display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color:'#d4d4d8' },
+  friVerifyStep: { background:'#7f1d1d15', border:'1px solid #ef444430', borderRadius:6, padding:'6px 8px', marginLeft:0 },
   planNum: { width:22, height:22, borderRadius:11, background:'#16a34a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0 },
 
   // Risk
@@ -403,8 +518,9 @@ const S = {
 
   // Footer
   resultFooter: { display:'flex', justifyContent:'space-between', borderTop:'1px solid #1f1f23', marginTop:12, paddingTop:8, fontSize:11, color:'#3f3f46' },
+  footerRight: { display:'flex', gap:12 },
 
-  // Feedback (Pillar 3)
+  // Feedback
   feedbackRow: { display:'flex', alignItems:'center', gap:8, marginTop:10, paddingTop:10, borderTop:'1px solid #1f1f23' },
   feedbackLabel: { fontSize:12, color:'#52525b', marginRight:4 },
   thumbBtn: { background:'transparent', border:'1px solid #27272a', borderRadius:6, padding:'4px 10px', fontSize:16, cursor:'pointer', transition:'all 0.15s' },

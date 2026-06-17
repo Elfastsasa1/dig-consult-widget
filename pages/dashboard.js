@@ -1,24 +1,29 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 
-// DIG Feedback Analytics Dashboard — Pillar 3 visualization
-// Route: /dashboard
+// ═══════════════════════════════════════════
+// DIG Dashboard v2.0 — FRI Analytics + Feedback
+// ═══════════════════════════════════════════
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [fri, setFri] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/dig/feedback');
-      const data = await res.json();
-      setStats(data.stats);
-      setFeedback(data.list);
+      const [fbRes, friRes] = await Promise.all([
+        fetch('/api/dig/feedback'),
+        fetch('/api/dig/fri'),
+      ]);
+      const fbData = await fbRes.json();
+      const friData = await friRes.json();
+      setStats(fbData.stats);
+      setFeedback(fbData.list);
+      if (friData.success) setFri(friData.fri);
     } catch (e) {
       console.error(e);
     } finally {
@@ -38,7 +43,7 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>DIG — Feedback Analytics</title>
+        <title>DIG — FRI Analytics Dashboard</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
 
@@ -47,9 +52,55 @@ export default function Dashboard() {
           {/* Header */}
           <div style={S.header}>
             <a href="/" style={S.backLink}>← Back to DIG</a>
-            <h1 style={S.title}>Feedback Analytics</h1>
-            <p style={S.subtitle}>Pillar 3 — Self-Correction Loop Dashboard</p>
+            <h1 style={S.title}>System Dashboard</h1>
+            <p style={S.subtitle}>FRI Analytics · Feedback Intelligence · Three Pillars</p>
           </div>
+
+          {/* FRI Hero Card */}
+          {fri && (
+            <div style={{...S.friHero, borderColor: fri.color + '40'}}>
+              <div style={S.friHeroLeft}>
+                <div style={{fontSize: 48, lineHeight: 1}}>{fri.icon}</div>
+              </div>
+              <div style={S.friHeroCenter}>
+                <div style={S.friHeroLabel}>FORECASTING RESILIENCE INDEX</div>
+                <div style={{...S.friHeroScore, color: fri.color}}>{fri.score}<span style={S.friHeroMax}>/100</span></div>
+                <div style={{...S.friHeroLevel, color: fri.color}}>{fri.level}</div>
+                <div style={S.friHeroDesc}>{fri.description}</div>
+              </div>
+              <div style={S.friHeroRight}>
+                <div style={S.friBarOuter}>
+                  <div style={{...S.friBarInner, height: `${fri.score}%`, background: fri.color}} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* FRI Breakdown */}
+          {fri && (
+            <div style={S.cardWide}>
+              <div style={S.cardLabel}>FRI BREAKDOWN</div>
+              <div style={S.breakdownGrid}>
+                {[
+                  { label: 'SATISFACTION', value: fri.breakdown?.satisfaction, weight: '35%', icon: '👍', color: '#22c55e' },
+                  { label: 'TREND', value: fri.breakdown?.trend, weight: '25%', icon: '📈', color: '#3b82f6' },
+                  { label: 'VOLUME', value: fri.breakdown?.volume, weight: '20%', icon: '📊', color: '#a78bfa' },
+                  { label: 'CONSISTENCY', value: fri.breakdown?.consistency, weight: '20%', icon: '🔒', color: '#f59e0b' },
+                ].map(f => (
+                  <div key={f.label} style={S.breakdownItem}>
+                    <div style={S.breakdownHeader}>
+                      <span>{f.icon} {f.label}</span>
+                      <span style={{fontSize: 9, color: '#52525b'}}>Weight: {f.weight}</span>
+                    </div>
+                    <div style={{...S.breakdownValue, color: f.color}}>{f.value ?? '—'}</div>
+                    <div style={S.breakdownBarOuter}>
+                      <div style={{...S.breakdownBarInner, width: `${f.value || 0}%`, background: f.color}} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {stats && (
             <>
@@ -89,7 +140,10 @@ export default function Dashboard() {
                   <span style={S.alertIcon}>🚨</span>
                   <div>
                     <div style={S.alertTitle}>NEGATIVE PATTERN DETECTED</div>
-                    <div style={S.alertText}>High negative feedback rate in recent 20 interactions. Model may be struggling in certain areas.</div>
+                    <div style={S.alertText}>
+                      High negative feedback rate in recent 20 interactions.
+                      {fri && <span> Current FRI: <strong style={{color: fri.color}}>{fri.score}</strong> — system is adapting.</span>}
+                    </div>
                   </div>
                 </div>
               )}
@@ -111,11 +165,11 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* All Feedback History */}
+              {/* Feedback History */}
               {feedback && (
                 <div style={S.cardWide}>
                   <div style={S.cardLabel}>FEEDBACK HISTORY ({feedback.total} total)</div>
-                  {feedback.items.map((fb, i) => (
+                  {feedback.items.map((fb) => (
                     <div key={fb.id} style={S.historyItem}>
                       <span style={fb.rating === 'up' ? S.ratedUp : S.ratedDown}>
                         {fb.rating === 'up' ? '👍' : '👎'}
@@ -132,7 +186,7 @@ export default function Dashboard() {
           )}
 
           <div style={S.refresh}>
-            <button style={S.refreshBtn} onClick={fetchData}>↻ Refresh</button>
+            <button style={S.refreshBtn} onClick={fetchData}>↻ Refresh All</button>
           </div>
         </div>
       </div>
@@ -143,11 +197,32 @@ export default function Dashboard() {
 const S = {
   page: { minHeight:'100vh', background:'#09090b', fontFamily:"'Inter',-apple-system,sans-serif", color:'#e4e4e7' },
   loading: { display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:14, color:'#71717a' },
-  container: { maxWidth:800, margin:'0 auto', padding:'32px 20px' },
+  container: { maxWidth:840, margin:'0 auto', padding:'32px 20px' },
   header: { marginBottom:32 },
   backLink: { fontSize:12, color:'#3b82f6', textDecoration:'none', marginBottom:8, display:'inline-block' },
   title: { fontSize:28, fontWeight:700, color:'#fafafa', margin:'8px 0 4px 0' },
   subtitle: { fontSize:13, color:'#71717a', margin:0 },
+
+  // FRI Hero
+  friHero: { display:'flex', alignItems:'center', gap:24, background:'#111113', border:'1px solid', borderRadius:14, padding:'24px 28px', marginBottom:20 },
+  friHeroLeft: { flexShrink:0 },
+  friHeroCenter: { flex:1 },
+  friHeroLabel: { fontSize:10, fontWeight:700, color:'#52525b', letterSpacing:'0.15em', marginBottom:4 },
+  friHeroScore: { fontSize:48, fontWeight:800, lineHeight:1.1 },
+  friHeroMax: { fontSize:20, fontWeight:400, color:'#3f3f46' },
+  friHeroLevel: { fontSize:14, fontWeight:600, marginTop:2 },
+  friHeroDesc: { fontSize:12, color:'#71717a', marginTop:4 },
+  friHeroRight: { width:24, height:120, flexShrink:0 },
+  friBarOuter: { width:24, height:'100%', background:'#1f1f23', borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'flex-end' },
+  friBarInner: { width:'100%', borderRadius:12, transition:'height 0.5s ease', minHeight: 8 },
+
+  // FRI Breakdown
+  breakdownGrid: { display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginTop:12 },
+  breakdownItem: { background:'#09090b', border:'1px solid #1f1f23', borderRadius:8, padding:'12px 14px' },
+  breakdownHeader: { display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:700, color:'#71717a', letterSpacing:'0.05em', marginBottom:6 },
+  breakdownValue: { fontSize:24, fontWeight:700, marginBottom:6 },
+  breakdownBarOuter: { height:4, background:'#1f1f23', borderRadius:2 },
+  breakdownBarInner: { height:'100%', borderRadius:2, transition:'width 0.5s ease' },
 
   cardGrid: { display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 },
   card: { background:'#111113', border:'1px solid #1f1f23', borderRadius:10, padding:'16px 18px', borderLeft:'3px solid #27272a' },

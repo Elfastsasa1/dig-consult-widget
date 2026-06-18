@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "pages/api/dig/consult.js": {
+      "maxDuration": 30
+    },
+    "pages/api/dig/fri.js": {
+      "maxDuration": 10
+    },
+    "pages/api/dig/feedback.js": {
+      "maxDuration": 10
+    }
+  }
+}
